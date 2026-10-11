@@ -1,0 +1,3 @@
+.tests/
+.rocks/
+luacov.*.out

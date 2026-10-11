@@ -1,0 +1,19 @@
+{
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "transcript_path": "/tmp/claude-statusline-demo/session.jsonl",
+  "cwd": "/tmp/claude-statusline-demo/my-app",
+  "model": { "id": "claude-opus-5-5", "display_name": "Opus 5.5" },
+  "workspace": {
+    "current_dir": "/tmp/claude-statusline-demo/my-app",
+    "project_dir": "/tmp/claude-statusline-demo/my-app"
+  },
+  "version": "2.1.0",
+  "context_window": {
+    "total_input_tokens": 45210,
+    "total_output_tokens": 8123,
+    "context_window_size": 200000,
+    "used_percentage": 42.5
+  },
+  "git": { "branch": "main", "added": 12, "deleted": 3 },
+  "agents": []
+}
