@@ -46,7 +46,7 @@ The CLI always uses the default order.
 
 ## Playground
 
-`:ClaudeStatusline playground` opens a new tab. The left side is an editable JSON fixture. The right side is a
+`:ClaudeStatusline playground` opens a new tab. The top is an editable JSON fixture. Below it, at full width, is a
 terminal buffer that shows the rendered ANSI line and re-renders as you type. If the JSON is invalid, the preview
 shows the decode error.
 
