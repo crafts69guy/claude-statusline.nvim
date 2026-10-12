@@ -136,7 +136,7 @@ function M.open()
 	pcall(vim.api.nvim_buf_set_name, S.json_buf, "claude-statusline://fixture.json")
 
 	-- Below the JSON at full width, tall enough for the `gw` width check.
-	vim.cmd("rightbelow 8new")
+	vim.cmd("rightbelow 10new")
 	S.term_win, S.term_buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
 	vim.bo[S.term_buf].bufhidden = "wipe"
 	vim.wo[S.term_win].number = false
