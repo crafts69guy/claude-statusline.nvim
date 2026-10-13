@@ -36,6 +36,7 @@ function M.git(dir)
 end
 
 --- Running subagents of the session, from `<transcript>/subagents/agent-*.jsonl`.
+--- An agent is finished when its last assistant turn has stop_reason end_turn or calls the SubagentHandback tool.
 ---@param transcript string?
 ---@return { type: string, model: string? }[]
 function M.agents(transcript)
@@ -50,13 +51,22 @@ function M.agents(transcript)
 		local st = kind == "file" and name:match("^agent%-.*%.jsonl$") and vim.uv.fs_stat(path)
 		local body = st and st.mtime.sec > cutoff and read(path)
 		if body then
-			-- A finished agent's transcript ends on an assistant turn with stop_reason end_turn.
-			-- ponytail: a killed agent never writes end_turn, so it shows until its file is 2h old.
-			local trimmed = body:sub(-1) == "\n" and body:sub(1, -2) or body
-			local nl = trimmed:reverse():find("\n", 1, true)
-			local last = decode(nl and trimmed:sub(#trimmed - nl + 2) or trimmed)
-			local msg = last and last.type == "assistant" and last.message
-			if not (type(msg) == "table" and msg.stop_reason == "end_turn") then
+			-- Finished = the last assistant turn is end_turn or a SubagentHandback tool_use; other line types are skipped.
+			-- ponytail: a killed agent never finishes, so it shows until its file is 2h old.
+			local done = false
+			local lines = vim.split(body, "\n", { plain = true })
+			for i = #lines, 1, -1 do
+				local obj = lines[i] ~= "" and decode(lines[i])
+				local msg = obj and obj.type == "assistant" and type(obj.message) == "table" and obj.message
+				if msg then
+					done = msg.stop_reason == "end_turn"
+					for _, c in ipairs(type(msg.content) == "table" and msg.content or {}) do
+						done = done or (type(c) == "table" and c.type == "tool_use" and c.name == "SubagentHandback")
+					end
+					break
+				end
+			end
+			if not done then
 				local model
 				for m in body:gmatch('"model":"(claude%-[^"]*)"') do
 					model = m

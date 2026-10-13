@@ -124,15 +124,16 @@ printf " %s" "$PIPE"
 printf " %s%s󰙴 %s%s" "$(rgb 200 80 220)" "$(bold)" "$model" "$(rst)"
 
 # ── 7. Running subagents — type·model, from the session's subagent transcripts ─
-# A finished agent's transcript ends on an assistant turn with stop_reason end_turn.
-# ponytail: a killed agent never writes end_turn, so it shows until its file is 2h old.
+# Finished = the last assistant turn is end_turn or calls SubagentHandback (other line types are skipped).
+# ponytail: a killed agent never finishes, so it shows until its file is 2h old.
 transcript=$(echo "$input" | jq -r '.transcript_path // empty')
 sub_dir="${transcript%.jsonl}/subagents"
 if [ -n "$transcript" ] && [ -d "$sub_dir" ]; then
   agents=""
   for f in $(find "$sub_dir" -name 'agent-*.jsonl' -mmin -120 2>/dev/null); do
-    stop=$(tail -n 1 "$f" | jq -r 'select(.type == "assistant") | .message.stop_reason // empty' 2>/dev/null)
-    [ "$stop" = "end_turn" ] && continue
+    stop=$(jq -c 'select(.type == "assistant")' "$f" 2>/dev/null | tail -n 1 |
+      jq -r 'if .message.stop_reason == "end_turn" or any(.message.content[]?; .type == "tool_use" and .name == "SubagentHandback") then "done" else empty end' 2>/dev/null)
+    [ "$stop" = "done" ] && continue
     type=$(jq -r '.agentType // "agent"' "${f%.jsonl}.meta.json" 2>/dev/null)
     # claude-sonnet-5-5 → Sonnet 5.5
     sub_model=$(grep -o '"model":"claude-[^"]*"' "$f" | tail -n 1 |

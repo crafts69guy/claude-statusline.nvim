@@ -91,11 +91,11 @@ The icon and colour of the context percentage change with usage:
 
 How subagents are detected:
 - It scans `<transcript_path without .jsonl>/subagents/agent-*.jsonl` for files modified in the last 120 minutes.
-- An agent is finished when its last line is an `assistant` turn with `stop_reason: "end_turn"`. Finished agents
-  are hidden.
+- An agent is finished when its last `assistant` turn has `stop_reason: "end_turn"` or calls the `SubagentHandback`
+  tool (lines after it, such as `user` tool results or hook attachments, are skipped). Finished agents are hidden.
 - The type comes from the matching `.meta.json` (`agentType`). The model is the last `"model":"claude-…"` in the
   transcript, so `claude-sonnet-5-5` becomes `Sonnet 5.5`.
-- A killed agent never writes `end_turn`, so it stays visible until its file is 2 hours old.
+- A killed agent never finishes, so it stays visible until its file is 2 hours old.
 
 ## Playground
 

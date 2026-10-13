@@ -152,14 +152,28 @@ write(
 	'{"type":"assistant","message":{"model":"claude-opus-5-5","stop_reason":"end_turn"}}\n'
 )
 write(sub .. "/agent-done.meta.json", '{"agentType":"Plan"}')
+write(
+	sub .. "/agent-handback.jsonl",
+	'{"type":"assistant","message":{"model":"claude-opus-5-5","stop_reason":null,"content":[{"type":"tool_use","name":"SubagentHandback"}]}}\n'
+		.. '{"type":"user","message":{"content":[{"type":"tool_result"}]}}\n'
+		.. '{"type":"attachment","attachment":{"type":"hook_blocking_error"}}\n'
+)
+write(
+	sub .. "/agent-bash.jsonl",
+	'{"type":"assistant","message":{"model":"claude-opus-5-5","stop_reason":null,"content":[{"type":"tool_use","name":"Bash"}]}}\n'
+		.. '{"type":"attachment","attachment":{"type":"x"}}\n'
+)
+write(sub .. "/agent-bash.meta.json", '{"agentType":"Build"}')
 write(sub .. "/agent-old.jsonl", '{"type":"user","message":{"model":"claude-opus-5-5"}}\n')
 vim.uv.fs_utime(sub .. "/agent-old.jsonl", os.time() - 3 * 3600, os.time() - 3 * 3600)
 
 test("collect: git + running subagents", function()
 	local ctx = Collect.run({ workspace = { current_dir = repo }, transcript_path = transcript })
 	assert(ctx.git.branch == "main" and ctx.git.added == 0, vim.inspect(ctx.git))
-	assert(#ctx.agents == 1, vim.inspect(ctx.agents))
-	assert(ctx.agents[1].type == "Explore" and ctx.agents[1].model == "claude-sonnet-5-5", vim.inspect(ctx.agents))
+	assert(#ctx.agents == 2, vim.inspect(ctx.agents))
+	local types = { ctx.agents[1].type, ctx.agents[2].type }
+	table.sort(types)
+	assert(types[1] == "Build" and types[2] == "Explore", vim.inspect(ctx.agents))
 	write(repo .. "/f.txt", "a\nb\n")
 	vim.system({ "git", "add", "f.txt" }, { cwd = repo }):wait()
 	local g = Collect.git(repo)
