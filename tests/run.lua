@@ -9,6 +9,7 @@ if vim.env.COVERAGE then
 end
 
 local Render = require("claude_statusline.render")
+local Config = require("claude_statusline.config")
 local Collect = require("claude_statusline.collect")
 local Playground = require("claude_statusline.playground")
 
@@ -203,6 +204,178 @@ local function run_cli(input)
 	return table.concat(vim.fn.readfile(out, "b"), "\n")
 end
 
+test("palette: compact, sanitized, clamped and every segment", function()
+	local palette = {}
+	for _, role in ipairs({
+		"text.primary",
+		"text.secondary",
+		"text.accent",
+		"accent.primary",
+		"accent.secondary",
+		"border.subtle",
+		"status.success",
+		"status.warning",
+		"status.error",
+		"status.info",
+	}) do
+		palette[role] = "#123456"
+	end
+	local opts = { palette = palette }
+	for _, p in ipairs({ -20, 0, 19, 20, 69, 70, 89, 90, 150 }) do
+		local line = Render.segments.context(ctx_used(p), opts)
+		has(line, "18;52;86")
+		has(line, ("%.0f%%"):format(math.max(0, math.min(100, p))))
+		hasnt(line, "█")
+	end
+	for _, ctx in ipairs({ {}, ctx_used(vim.NIL), ctx_used("bad"), ctx_used(0 / 0) }) do
+		has(Render.segments.context(ctx, opts), "unknown")
+	end
+	opts.segments = vim.list_extend(vim.deepcopy(Render.order), { "directory" })
+	local ctx = {
+		workspace = { current_dir = "/x/dir\n\27bad" },
+		model = { display_name = "model\n\27bad" },
+		git = { branch = "main\n\27bad", added = 2, deleted = 3 },
+		agents = { { type = "agent\n\27bad" } },
+	}
+	local line = Render.render(ctx, opts)
+	has(line, "dirbad")
+	hasnt(line, "\n")
+	hasnt(line, "\27bad")
+	has(line, "modelbad")
+	has(line, "mainbad")
+	has(line, "agentbad")
+end)
+
+test("config validation and shell-safe session settings", function()
+	local path = tmp .. "/config.json"
+	local palette = {}
+	for _, role in ipairs({
+		"text.primary",
+		"text.secondary",
+		"text.accent",
+		"accent.primary",
+		"accent.secondary",
+		"border.subtle",
+		"status.success",
+		"status.warning",
+		"status.error",
+		"status.info",
+	}) do
+		palette[role] = "#123456"
+	end
+	local cfg = { segments = { "model", "directory", "branch", "context" }, palette = palette }
+	write(path, vim.json.encode(cfg))
+	assert(Config.load(path))
+	local entry = "/path with spaces/'quote\n/statusline.lua"
+	local session = decode(Config.settings("huong", entry, path))
+	assert(session.theme == "custom:hue-theme:hue-huong")
+	assert(
+		session.statusLine.command == "nvim -l " .. vim.fn.shellescape(entry) .. " --config " .. vim.fn.shellescape(path)
+	)
+	local saved = arg
+	-- selene: allow(global_usage)
+	rawset(_G, "arg", { "--config", path })
+	has(run_cli("{}"), "unknown")
+	-- selene: allow(global_usage)
+	rawset(_G, "arg", { "huong", entry, path })
+	local inp, out = tmp .. "/session.in", tmp .. "/session.out"
+	write(inp, "")
+	io.input(inp)
+	io.output(out)
+	dofile(root .. "/bin/session.lua")
+	io.input():close()
+	io.output():close()
+	io.input(io.stdin)
+	io.output(io.stdout)
+	assert(decode(table.concat(vim.fn.readfile(out), "\n")).theme == session.theme)
+	-- selene: allow(global_usage)
+	rawset(_G, "arg", saved)
+	assert(not Config.load(tmp .. "/missing"))
+	for _, body in ipairs({ "{bad", "null", "{}", '{"palette":{},"segments":[]}' }) do
+		write(path, body)
+		assert(not Config.load(path))
+	end
+	for _, bad in ipairs({ { "model", "bad" }, { 1 }, { model = true } }) do
+		cfg.segments = bad
+		write(path, vim.json.encode(cfg))
+		assert(not Config.load(path))
+	end
+	cfg.segments = {}
+	cfg.palette["text.primary"] = "red"
+	write(path, vim.json.encode(cfg))
+	assert(not Config.load(path))
+	cfg.palette["text.primary"] = 42
+	write(path, vim.json.encode(cfg))
+	assert(not Config.load(path))
+end)
+
+test("entry diagnostics exit nonzero before rendering", function()
+	local saved, exit, stderr = arg, os.exit, io.stderr
+	local diagnostics = {}
+	-- selene: allow(incorrect_standard_library_use)
+	os.exit = function(code)
+		assert(code == 1)
+		error("exit 1")
+	end
+	-- selene: allow(incorrect_standard_library_use)
+	io.stderr = {
+		write = function(_, s)
+			diagnostics[#diagnostics + 1] = s
+		end,
+	}
+	for _, case in ipairs({
+		{ "session", {} },
+		{ "session", { "mua", "entry", tmp .. "/missing" } },
+		{ "statusline", { "bad" } },
+		{ "statusline", { "--config", tmp .. "/missing" } },
+	}) do
+		-- selene: allow(global_usage)
+		rawset(_G, "arg", case[2])
+		local ok, err = pcall(dofile, root .. "/bin/" .. case[1] .. ".lua")
+		assert(not ok and tostring(err):find("exit 1", 1, true))
+		has(diagnostics[#diagnostics], "claude-statusline:")
+	end
+	-- selene: allow(incorrect_standard_library_use)
+	os.exit, io.stderr = exit, stderr
+	-- selene: allow(global_usage)
+	rawset(_G, "arg", saved)
+end)
+
+test("collect selected segments: branch-only, none, detached and failed git", function()
+	local real = vim.system
+	local calls = {}
+	vim.system = function(cmd)
+		calls[#calls + 1] = cmd
+		return {
+			wait = function(_, timeout)
+				assert(timeout == 2000)
+				return { code = cmd[5] == "diff" and 1 or 0, stdout = cmd[6] == "--abbrev-ref" and "HEAD\n" or "abc123\n" }
+			end,
+		}
+	end
+	local ok, err = pcall(function()
+		local ctx = Collect.run({}, { segments = { "directory" } })
+		assert(#calls == 0 and ctx.git == nil and #ctx.agents == 0)
+		ctx = Collect.run({}, { segments = { "branch" } })
+		assert(#calls == 2 and ctx.git.branch == "abc123")
+		Collect.git(repo)
+		assert(calls[#calls - 1][5] == "diff")
+		vim.system = function()
+			return {
+				wait = function()
+					return { code = 1 }
+				end,
+			}
+		end
+		assert(Collect.git(repo) == nil)
+	end)
+	vim.system = real
+	assert(ok, err)
+	assert(vim.system({ "git", "checkout", "--detach", "-q" }, { cwd = repo }):wait().code == 0)
+	assert(Collect.git(repo, false).branch ~= "HEAD")
+	vim.system({ "git", "checkout", "main", "-q" }, { cwd = repo }):wait()
+end)
+
 test("cli: fixture in, line out", function()
 	local out = run_cli(table.concat(vim.fn.readfile(root .. "/fixtures/mid.json"), "\n"))
 	has(out, "󰊚 42%")
@@ -348,6 +521,29 @@ test("playground: command, every keymap, errors, close", function()
 	end)
 	vim.notify = notify
 	assert(ok, err)
+end)
+
+test("playground palette propagates to preview and yanked ANSI", function()
+	local Init = require("claude_statusline")
+	Init.opts = {
+		segments = { "model", "directory", "context" },
+		palette = {
+			["accent.primary"] = "#123456",
+			["text.primary"] = "#234567",
+			["border.subtle"] = "#345678",
+			["status.warning"] = "#456789",
+		},
+	}
+	Playground.open()
+	local buf = vim.api.nvim_get_current_buf()
+	vim.api.nvim_feedkeys(vim.keycode("gy"), "x", false)
+	local line = vim.fn.getreg('"')
+	has(line, "18;52;86")
+	has(line, "69;103;137")
+	hasnt(line, "█")
+	vim.api.nvim_feedkeys(vim.keycode("q"), "x", false)
+	assert(not vim.api.nvim_buf_is_valid(buf))
+	Init.opts = {}
 end)
 
 local bash = vim.env.CLAUDE_STATUSLINE_BASH or root .. "/tests/statusline-command.sh"

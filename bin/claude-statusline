@@ -1,0 +1,38 @@
+#!/usr/bin/env -S fish --no-config
+set -l mood mua
+if test "$argv[1]" = --mood
+    if test (count $argv) -lt 2
+        echo 'claude-statusline: --mood requires mua, huong, or cung' >&2
+        exit 1
+    end
+    set mood $argv[2]
+    set -e argv[1..2]
+else if string match -q -- '--mood=*' "$argv[1]"
+    set mood (string replace -- '--mood=' '' "$argv[1]")
+    set -e argv[1]
+end
+if not contains -- "$mood" mua huong cung
+    echo 'claude-statusline: invalid mood' >&2
+    exit 1
+end
+if test "$argv[1]" = --
+    set -e argv[1]
+end
+if not set -q HUE_THEME_ROOT; or test -z "$HUE_THEME_ROOT"
+    echo 'claude-statusline: set HUE_THEME_ROOT to the hue-theme repository' >&2
+    exit 1
+end
+set -l own (path resolve -- (status filename))
+set -l root (path dirname -- (path dirname -- "$own"))
+set -l hue_root (path resolve -- "$HUE_THEME_ROOT")
+set -l plugin "$hue_root/packages/claude-code-plugin"
+set -l config "$plugin/statusline/hue-$mood.json"
+for file in "$root/bin/statusline.lua" "$root/bin/session.lua" "$plugin/.claude-plugin/plugin.json" "$plugin/themes/hue-$mood.json" "$config"
+    if not test -r "$file"
+        echo "claude-statusline: cannot read $file" >&2
+        exit 1
+    end
+end
+set -l settings (nvim -l "$root/bin/session.lua" "$mood" "$root/bin/statusline.lua" "$config")
+or exit $status
+exec claude --plugin-dir "$plugin" --settings "$settings" $argv

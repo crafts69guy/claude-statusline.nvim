@@ -17,6 +17,45 @@ edit the session JSON and see the line re-render as you type.
 
 </div>
 
+## Hue sessions
+
+Runtime dependencies: Fish, Neovim (with `vim.system`), and Claude Code. Install
+the launcher as a symlink and point it at a Hue repository with generated
+`packages/claude-code-plugin` artifacts:
+
+```fish
+mkdir -p ~/.local/bin
+ln -s /path/to/claude-statusline.nvim/bin/claude-statusline ~/.local/bin/claude-statusline
+set -gx HUE_THEME_ROOT /path/to/hue-theme
+claude-statusline
+claude-statusline --mood huong -- resume SESSION_ID
+claude-statusline --mood=cung -- 'prompt with spaces'
+```
+
+The default mood is `mua`; `huong` and `cung` are also supported. Only the leading
+mood option and optional `--` are consumed. Remaining arguments pass unchanged.
+The wrapper resolves symlinks and relative Hue paths, validates the palette,
+and supplies `--plugin-dir` plus session-only `--settings`. It writes no user
+configuration. `exec` preserves the PID, terminal, signals, and exit status.
+Remove `~/.local/bin/claude-statusline` to uninstall; plain `claude` uses your
+usual settings.
+
+Hue mode displays model, directory basename, Git branch (short SHA when detached),
+and compact context percentage. Missing context is `unknown`; percentages clamp
+to 0–100. Success/warning/error colors use the existing usage thresholds. Only
+selected Git/diff/agent data is collected. The Lua plugin accepts
+`setup({ segments = {...}, palette = {...} })`, including in the playground.
+The standalone entry accepts `--config /path/to/statusline/hue-mua.json`.
+Palette keys are Hue semantic roles with `#RRGGBB` values. Invalid launcher
+config fails before Claude starts. Without config, original CLI output and
+the context gradient bar retain byte parity, including malformed-stdin fallback.
+
+Terminal Hue mood is selected separately. Changing Claude's `/theme` during a
+session does not update the statusline palette; choose the mood at startup.
+The plugin uses the official custom-theme loader without marketplace publication.
+Python 3 is needed only for launcher development checks (`make test` and
+`make check`), which use fake Claude and real PTYs.
+
 ## Why
 
 Claude Code pipes a JSON blob into a status line command. The usual bash/`jq` script calls `jq` about ten times
@@ -128,16 +167,16 @@ subagents from `transcript_path`. To preview your real repo and session, edit th
 
 ## Development
 
-You need Neovim 0.10+, `stylua`, and `selene` (`brew install selene`). Coverage also needs `luarocks`.
+You need Neovim 0.10+, `stylua`, and `selene` (`brew install selene`). Coverage also needs `luarocks`; launcher checks need Fish and Python 3.
 
 | Target           | What it does                                                                                               |
 | ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| `make test`      | `nvim -l tests/run.lua`: unit checks, a headless drive of every playground key, and byte parity with bash   |
+| `make test`      | Lua unit/playground checks and Bash byte parity, fake Claude launcher/PTY/signal checks, and Fish syntax checks |
 | `make coverage`  | installs luacov into `./.rocks` (repo-local, LuaJIT/5.1) if missing, runs the tests under it, and fails below 98% (`MIN=` to override) |
 | `make lint`      | `selene lua plugin bin tests` (`selene.toml` with the `vim.yml` std)                                        |
 | `make fmt`       | `stylua .`                                                                                                 |
 | `make fmt-check` | `stylua --check .`                                                                                         |
-| `make check`     | runs `fmt-check`, then `lint`, then `coverage`                                                             |
+| `make check`     | runs `fmt-check`, `lint`, `coverage`, fake Claude launcher checks, and Fish syntax checks |
 | `make clean`     | removes `.rocks/` and the luacov output                                                                    |
 
 ```sh
@@ -179,9 +218,10 @@ in these cases:
 The two git calls run in parallel through `vim.system`. Subagent transcripts are read whole, so a session with
 many large agent transcripts costs a few extra milliseconds.
 
-**Options only apply inside Neovim.** `setup({ segments = … })` changes the playground. The CLI never loads your
-config, so Claude Code always gets the default order. To change the order there, edit `M.order` in
-`render.lua` in your fork.
+**Options for the playground and CLI.** `setup({ segments = …, palette = … })` changes the playground.
+The CLI skips your Neovim config; pass `--config /path/to/config.json` to select its segment order and
+palette. Without `--config`, the CLI uses the original default order and colors. The Hue launcher
+passes the selected mood's generated config automatically.
 
 ## License
 

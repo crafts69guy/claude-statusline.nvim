@@ -18,18 +18,25 @@ local function decode(s)
 end
 
 ---@param dir string
+---@param diff? boolean collect diff counts; defaults to true
 ---@return { branch: string, added: integer, deleted: integer }|nil
-function M.git(dir)
-	-- Both calls in parallel; --no-optional-locks keeps us from fighting the user's git.
+function M.git(dir, diff)
+	-- Collect branch and requested diff in parallel; avoid fighting the user's git.
 	local branch = vim.system({ "git", "--no-optional-locks", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD" })
-	local stat = vim.system({ "git", "--no-optional-locks", "-C", dir, "diff", "--shortstat", "HEAD" })
-	local b, s = branch:wait(2000), stat:wait(2000)
+	local stat = diff ~= false and vim.system({ "git", "--no-optional-locks", "-C", dir, "diff", "--shortstat", "HEAD" })
+	local b = branch:wait(2000)
+	local s = stat and stat:wait(2000)
 	if b.code ~= 0 then
 		return nil
 	end
-	local out = s.code == 0 and s.stdout or ""
+	local name = vim.trim(b.stdout or "")
+	if name == "HEAD" then
+		local sha = vim.system({ "git", "--no-optional-locks", "-C", dir, "rev-parse", "--short", "HEAD" }):wait(2000)
+		name = sha.code == 0 and vim.trim(sha.stdout or "") or name
+	end
+	local out = s and s.code == 0 and s.stdout or ""
 	return {
-		branch = vim.trim(b.stdout or ""),
+		branch = name,
 		added = tonumber(out:match("(%d+) insertion")) or 0,
 		deleted = tonumber(out:match("(%d+) deletion")) or 0,
 	}
@@ -82,13 +89,22 @@ end
 
 --- Overwrite ctx.git / ctx.agents with real data.
 ---@param ctx table
+---@param opts? claude_statusline.Config collect only selected segments
 ---@return table ctx
-function M.run(ctx)
+function M.run(ctx, opts)
+	local selected = opts and opts.segments or require("claude_statusline.render").order
+	local git_needed = vim.tbl_contains(selected, "branch") or vim.tbl_contains(selected, "diff")
 	local ws = type(ctx.workspace) == "table" and ctx.workspace or {}
 	local dir = type(ws.current_dir) == "string" and ws.current_dir ~= "" and ws.current_dir or vim.uv.cwd()
-	local ok, git = pcall(M.git, dir)
+	local ok, git = true, nil
+	if git_needed then
+		ok, git = pcall(M.git, dir, vim.tbl_contains(selected, "diff"))
+	end
 	ctx.git = ok and git or nil
-	local ok2, agents = pcall(M.agents, ctx.transcript_path)
+	local ok2, agents = true, {}
+	if vim.tbl_contains(selected, "agents") then
+		ok2, agents = pcall(M.agents, ctx.transcript_path)
+	end
 	ctx.agents = ok2 and agents or {}
 	return ctx
 end

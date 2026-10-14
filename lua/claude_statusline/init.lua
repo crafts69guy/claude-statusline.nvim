@@ -2,6 +2,7 @@ local M = {}
 
 ---@class claude_statusline.Config
 ---@field segments? string[] ordered segment names (see render.order); omit one to disable it
+---@field palette? table<string, string> semantic roles mapped to #RRGGBB
 M.opts = {}
 
 ---@param opts? claude_statusline.Config

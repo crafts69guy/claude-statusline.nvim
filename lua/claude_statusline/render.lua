@@ -37,6 +37,16 @@ local function num(v)
 	return tonumber(v) or 0
 end
 
+local function color(opts, role, r, g, b)
+	local hex = get(opts, "palette", role)
+	return hex and rgb(tonumber(hex:sub(2, 3), 16), tonumber(hex:sub(4, 5), 16), tonumber(hex:sub(6, 7), 16))
+		or rgb(r, g, b)
+end
+
+local function display(s, opts)
+	return get(opts, "palette") and s:gsub("[%z\1-\31\127]", "") or s
+end
+
 --- claude-sonnet-5-5 -> Sonnet 5.5; unparseable ids pass through capitalized.
 function M.model_name(id)
 	id = str(id)
@@ -60,17 +70,34 @@ end
 
 M.segments = {}
 
-function M.segments.repo(ctx)
+function M.segments.repo(ctx, opts)
 	local name = str(get(ctx, "workspace", "repo", "name")) or vim.fs.basename(dir(ctx))
-	return BOLD .. rgb(255, 210, 0) .. ICON.repo .. " " .. name .. RST
+	return BOLD .. color(opts, "text.accent", 255, 210, 0) .. ICON.repo .. " " .. display(name, opts) .. RST
 end
 
-function M.segments.branch(ctx)
+---@param ctx table
+---@param opts? claude_statusline.Config
+---@return string
+function M.segments.directory(ctx, opts)
+	return color(opts, "text.primary", 255, 210, 0) .. BOLD .. display(vim.fs.basename(dir(ctx)), opts) .. RST
+end
+
+function M.segments.branch(ctx, opts)
 	local branch = str(get(ctx, "git", "branch"))
-	return branch and BOLD .. rgb(0, 220, 220) .. ICON.branch .. " " .. branch .. RST
+	return branch
+		and BOLD .. color(opts, "accent.secondary", 0, 220, 220) .. ICON.branch .. " " .. display(branch, opts) .. RST
 end
 
-function M.segments.context(ctx)
+function M.segments.context(ctx, opts)
+	if get(opts, "palette") then
+		local used = tonumber(get(ctx, "context_window", "used_percentage"))
+		if not used or used ~= used then
+			return color(opts, "text.secondary", 150, 150, 150) .. "unknown" .. RST
+		end
+		used = math.max(0, math.min(100, used))
+		local role = used < 20 and "status.success" or used < 90 and "status.warning" or "status.error"
+		return color(opts, role, 150, 150, 150) .. BOLD .. ("%.0f%%"):format(used) .. RST
+	end
 	local used = tonumber(("%.0f"):format(num(get(ctx, "context_window", "used_percentage"))))
 	local filled = math.min(math.floor(used * 20 / 100), 20)
 	local icon, pct
@@ -100,52 +127,56 @@ function M.segments.context(ctx)
 	return table.concat(out) .. RST .. " " .. pct .. BOLD .. icon .. " " .. ("%d%%"):format(used) .. RST
 end
 
-function M.segments.tokens(ctx)
+function M.segments.tokens(ctx, opts)
 	local total = num(get(ctx, "context_window", "total_input_tokens"))
 		+ num(get(ctx, "context_window", "total_output_tokens"))
-	return rgb(255, 210, 0) .. BOLD .. ICON.tokens .. " " .. M.tokens(total) .. " tok" .. RST
+	return color(opts, "text.accent", 255, 210, 0) .. BOLD .. ICON.tokens .. " " .. M.tokens(total) .. " tok" .. RST
 end
 
-function M.segments.diff(ctx)
+function M.segments.diff(ctx, opts)
 	local add, del = num(get(ctx, "git", "added")), num(get(ctx, "git", "deleted"))
 	if add <= 0 and del <= 0 then
 		return nil
 	end
-	local plus = rgb(0, 220, 80) .. BOLD .. "+" .. add .. RST
-	local minus = rgb(220, 60, 40) .. BOLD .. "-" .. del .. RST
-	return rgb(150, 150, 150) .. ICON.diff .. " " .. plus .. minus
+	local plus = color(opts, "status.success", 0, 220, 80) .. BOLD .. "+" .. add .. RST
+	local minus = color(opts, "status.error", 220, 60, 40) .. BOLD .. "-" .. del .. RST
+	return color(opts, "text.secondary", 150, 150, 150) .. ICON.diff .. " " .. plus .. minus
 end
 
-function M.segments.model(ctx)
+function M.segments.model(ctx, opts)
 	local name = str(get(ctx, "model", "display_name")) or "Claude"
-	return rgb(200, 80, 220) .. BOLD .. "󰙴 " .. name .. RST
+	return color(opts, "accent.primary", 200, 80, 220) .. BOLD .. "󰙴 " .. display(name, opts) .. RST
 end
 
-function M.segments.agents(ctx)
+function M.segments.agents(ctx, opts)
 	local list = {}
 	for _, a in ipairs(type(ctx.agents) == "table" and ctx.agents or {}) do
 		local t = str(get(a, "type")) or "agent"
 		list[#list + 1] = t .. "·" .. (M.model_name(get(a, "model")) or "…")
 	end
-	return #list > 0 and rgb(120, 170, 255) .. BOLD .. "󰚩 " .. table.concat(list, ", ") .. RST or nil
+	return #list > 0
+			and color(opts, "status.info", 120, 170, 255) .. BOLD .. "󰚩 " .. display(table.concat(list, ", "), opts) .. RST
+		or nil
 end
 
 M.order = { "repo", "branch", "context", "tokens", "diff", "model", "agents" }
 
 ---@param ctx table decoded Claude JSON plus `git` and `agents`
----@param opts? { segments?: string[] } ordered segment names; omit one to disable it
+---@param opts? claude_statusline.Config ordered segment names and optional semantic palette
 ---@return string
 function M.render(ctx, opts)
 	ctx = type(ctx) == "table" and ctx or {}
 	local parts = {}
 	for _, name in ipairs(get(opts, "segments") or M.order) do
 		local seg = M.segments[name]
-		local s = seg and seg(ctx)
+		local s = seg and seg(ctx, opts)
 		if s then
 			parts[#parts + 1] = s
 		end
 	end
-	return table.concat(parts, M.SEP)
+	local sep = get(opts, "palette") and (" " .. DIM .. color(opts, "border.subtle", 90, 90, 90) .. "|" .. RST .. " ")
+		or M.SEP
+	return table.concat(parts, sep)
 end
 
 return M

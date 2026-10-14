@@ -69,9 +69,10 @@ function M.render()
 		lines = { "\27[1;38;2;220;40;20mJSON error:\27[0m " .. tostring(ok and "top level must be an object" or ctx) }
 	else
 		if S.live then
-			Collect.run(ctx)
+			Collect.run(ctx, { segments = segments() })
 		end
-		local okr, line = pcall(Render.render, ctx, { segments = segments() })
+		local okr, line =
+			pcall(Render.render, ctx, { segments = segments(), palette = require("claude_statusline").opts.palette })
 		S.ansi = okr and line or nil
 		lines = { okr and line or ("\27[1;38;2;220;40;20mrender error:\27[0m " .. tostring(line)) }
 		if okr and S.show_widths then

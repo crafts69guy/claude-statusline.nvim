@@ -5,6 +5,8 @@ LUACOV := $(ROCKS)/share/lua/5.1/luacov.lua
 
 test:
 	nvim -l tests/run.lua
+	python3 tests/launcher.py
+	fish -n bin/claude-statusline
 
 $(LUACOV):
 	luarocks --lua-version 5.1 --tree $(ROCKS) install luacov
@@ -24,6 +26,8 @@ fmt-check:
 	stylua --check .
 
 check: fmt-check lint coverage
+	python3 tests/launcher.py
+	fish -n bin/claude-statusline
 
 clean:
 	rm -rf $(ROCKS) luacov.stats.out luacov.report.out

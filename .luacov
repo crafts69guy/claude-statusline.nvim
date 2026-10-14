@@ -1,5 +1,5 @@
 return {
-	include = { "lua/claude_statusline/[^/]+$", "bin/statusline$" },
+	include = { "lua/claude_statusline/[^/]+$", "bin/statusline$", "bin/session$" },
 	statsfile = "luacov.stats.out",
 	reportfile = "luacov.report.out",
 }
