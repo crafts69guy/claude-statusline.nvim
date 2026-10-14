@@ -40,6 +40,27 @@ configuration. `exec` preserves the PID, terminal, signals, and exit status.
 Remove `~/.local/bin/claude-statusline` to uninstall; plain `claude` uses your
 usual settings.
 
+To make plain `claude` (and wrappers such as `orch claude`) use Hue, declare it in
+your settings instead. The Hue repository is a plugin marketplace. A `directory`
+source loads it in place, so regenerated artifacts apply on the next session:
+
+```fish
+claude plugin marketplace add /path/to/hue-theme
+claude plugin install hue-theme@hue-theme
+```
+
+```json
+{
+  "theme": "custom:hue-theme:hue-mua",
+  "statusLine": {
+    "type": "command",
+    "command": "nvim -l /path/to/claude-statusline.nvim/bin/statusline.lua --config /path/to/hue-theme/packages/claude-code-plugin/statusline/hue-mua.json"
+  }
+}
+```
+
+The launcher's `--mood` still overrides both for a single session.
+
 Hue mode displays model, directory basename, Git branch (short SHA when detached),
 and compact context percentage. Missing context is `unknown`; percentages clamp
 to 0–100. Success/warning/error colors use the existing usage thresholds. Only
