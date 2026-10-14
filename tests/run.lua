@@ -236,7 +236,7 @@ test("palette: full bar, sanitized, clamped and every segment", function()
 	pal["border.faint"] = "#111111"
 	has(Render.segments.context(ctx_used(0), { palette = pal }), "38;2;17;17;17m" .. ("█"):rep(20))
 	for _, ctx in ipairs({ {}, ctx_used(vim.NIL), ctx_used("bad"), ctx_used(0 / 0) }) do
-		has(Render.segments.context(ctx, opts), "unknown")
+		has(Render.segments.context(ctx, opts), "0%")
 	end
 	opts.segments = vim.list_extend(vim.deepcopy(Render.order), { "directory" })
 	local ctx = {
@@ -283,7 +283,7 @@ test("config validation and shell-safe session settings", function()
 	local saved = arg
 	-- selene: allow(global_usage)
 	rawset(_G, "arg", { "--config", path })
-	has(run_cli("{}"), "unknown")
+	has(run_cli("{}"), "0%")
 	-- selene: allow(global_usage)
 	rawset(_G, "arg", { "huong", entry, path })
 	local inp, out = tmp .. "/session.in", tmp .. "/session.out"

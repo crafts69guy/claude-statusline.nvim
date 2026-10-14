@@ -90,11 +90,9 @@ end
 
 function M.segments.context(ctx, opts)
 	if get(opts, "palette") then
-		local used = tonumber(get(ctx, "context_window", "used_percentage"))
-		if not used or used ~= used then
-			return color(opts, "text.secondary", 150, 150, 150) .. "unknown" .. RST
-		end
-		used = math.max(0, math.min(100, used))
+		-- A fresh session reports no usage yet; draw it as an empty bar.
+		local used = num(get(ctx, "context_window", "used_percentage"))
+		used = used == used and math.max(0, math.min(100, used)) or 0
 		local filled = math.min(math.floor(used * 20 / 100), 20)
 		local fallback = { ["status.success"] = "#00DC50", ["status.warning"] = "#DCC800", ["status.error"] = "#DC2814" }
 		local function hex(role)

@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix="claude launcher 'quoted' ") as director
                            '--config', str(plugin / f'statusline/hue-{mood}.json')]
         rendered = subprocess.run(command, input='{}', text=True, capture_output=True,
                                   env=env, timeout=10)
-        assert rendered.returncode == 0 and 'unknown' in rendered.stdout, rendered.stderr
+        assert rendered.returncode == 0 and '0%' in rendered.stdout, rendered.stderr
 
     verify([])
     verify(['--', "quote ' spaces", '', 'line\nbreak'], remaining=["quote ' spaces", '', 'line\nbreak'])

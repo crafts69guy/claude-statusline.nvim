@@ -62,7 +62,7 @@ claude plugin install hue-theme@hue-theme
 The launcher's `--mood` still overrides both for a single session.
 
 Hue mode renders the same segments and context bar as the default, recolored by the
-palette. Missing context is `unknown`; percentages clamp to 0–100. The bar blends
+palette. Missing context renders as `0%`; percentages clamp to 0–100. The bar blends
 success, warning and error colors, and the label uses the usage thresholds. Only
 selected Git/diff/agent data is collected. The Lua plugin accepts
 `setup({ segments = {...}, palette = {...} })`, including in the playground.
