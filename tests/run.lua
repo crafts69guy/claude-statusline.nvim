@@ -46,6 +46,7 @@ end)
 
 test("garbage input never errors", function()
 	Render.render({})
+	---@diagnostic disable-next-line: param-type-mismatch
 	Render.render(nil)
 	Render.render({ context_window = 5, model = "x", git = { added = "nope" }, agents = { 1, {} } })
 	Render.render({ context_window = { used_percentage = "abc", total_input_tokens = vim.NIL } })
@@ -178,7 +179,7 @@ test("collect: git + running subagents", function()
 	write(repo .. "/f.txt", "a\nb\n")
 	vim.system({ "git", "add", "f.txt" }, { cwd = repo }):wait()
 	local g = Collect.git(repo)
-	assert(g.added == 2 and g.deleted == 0, vim.inspect(g))
+	assert(g and g.added == 2 and g.deleted == 0, vim.inspect(g))
 	vim.system({ "git", "rm", "-q", "--cached", "f.txt" }, { cwd = repo }):wait()
 	os.remove(repo .. "/f.txt")
 end)
@@ -321,10 +322,10 @@ test("entry diagnostics exit nonzero before rendering", function()
 	local saved, exit, stderr = arg, os.exit, io.stderr
 	local diagnostics = {}
 	-- selene: allow(incorrect_standard_library_use)
-	os.exit = function(code)
+	rawset(os, "exit", function(code)
 		assert(code == 1)
 		error("exit 1")
-	end
+	end)
 	-- selene: allow(incorrect_standard_library_use)
 	io.stderr = {
 		write = function(_, s)
@@ -352,7 +353,7 @@ end)
 test("collect selected segments: branch-only, none, detached and failed git", function()
 	local real = vim.system
 	local calls = {}
-	vim.system = function(cmd)
+	rawset(vim, "system", function(cmd)
 		calls[#calls + 1] = cmd
 		return {
 			wait = function(_, timeout)
@@ -360,7 +361,7 @@ test("collect selected segments: branch-only, none, detached and failed git", fu
 				return { code = cmd[5] == "diff" and 1 or 0, stdout = cmd[6] == "--abbrev-ref" and "HEAD\n" or "abc123\n" }
 			end,
 		}
-	end
+	end)
 	local ok, err = pcall(function()
 		local ctx = Collect.run({}, { segments = { "directory" } })
 		assert(#calls == 0 and ctx.git == nil and #ctx.agents == 0)
@@ -368,13 +369,13 @@ test("collect selected segments: branch-only, none, detached and failed git", fu
 		assert(#calls == 2 and ctx.git.branch == "abc123")
 		Collect.git(repo)
 		assert(calls[#calls - 1][5] == "diff")
-		vim.system = function()
+		rawset(vim, "system", function()
 			return {
 				wait = function()
 					return { code = 1 }
 				end,
 			}
-		end
+		end)
 		assert(Collect.git(repo) == nil)
 	end)
 	vim.system = real
@@ -410,9 +411,9 @@ end)
 
 test("playground: command, every keymap, errors, close", function()
 	local notes, notify = {}, vim.notify
-	vim.notify = function(msg)
+	rawset(vim, "notify", function(msg)
 		notes[#notes + 1] = msg
-	end
+	end)
 	local api, Init = vim.api, require("claude_statusline")
 	local function keys(k)
 		api.nvim_feedkeys(vim.keycode(k), "x", false)
@@ -507,9 +508,9 @@ test("playground: command, every keymap, errors, close", function()
 		set_json("{ broken")
 		has(preview(), "JSON error:")
 		local repo_seg = Render.segments.repo
-		Render.segments.repo = function()
+		rawset(Render.segments, "repo", function()
 			error("boom")
-		end
+		end)
 		set_json("{}")
 		Render.segments.repo = repo_seg
 		has(preview(), "render error:")
