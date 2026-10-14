@@ -204,7 +204,7 @@ local function run_cli(input)
 	return table.concat(vim.fn.readfile(out, "b"), "\n")
 end
 
-test("palette: compact, sanitized, clamped and every segment", function()
+test("palette: full bar, sanitized, clamped and every segment", function()
 	local palette = {}
 	for _, role in ipairs({
 		"text.primary",
@@ -225,8 +225,16 @@ test("palette: compact, sanitized, clamped and every segment", function()
 		local line = Render.segments.context(ctx_used(p), opts)
 		has(line, "18;52;86")
 		has(line, ("%.0f%%"):format(math.max(0, math.min(100, p))))
-		hasnt(line, "█")
+		assert(select(2, line:gsub("█", "")) == 20)
 	end
+	local pal = { ["status.success"] = "#00FF00", ["status.warning"] = "#FFFF00", ["status.error"] = "#FF0000" }
+	pal["border.subtle"] = "#222222"
+	has(Render.segments.context(ctx_used(100), { palette = pal }), "\27[38;2;0;255;0m█")
+	has(Render.segments.context(ctx_used(100), { palette = pal }), "38;2;255;255;0m█")
+	has(Render.segments.context(ctx_used(100), { palette = pal }), "38;2;255;0;0m█")
+	has(Render.segments.context(ctx_used(0), { palette = pal }), "38;2;34;34;34m" .. ("█"):rep(20))
+	pal["border.faint"] = "#111111"
+	has(Render.segments.context(ctx_used(0), { palette = pal }), "38;2;17;17;17m" .. ("█"):rep(20))
 	for _, ctx in ipairs({ {}, ctx_used(vim.NIL), ctx_used("bad"), ctx_used(0 / 0) }) do
 		has(Render.segments.context(ctx, opts), "unknown")
 	end
@@ -540,7 +548,7 @@ test("playground palette propagates to preview and yanked ANSI", function()
 	local line = vim.fn.getreg('"')
 	has(line, "18;52;86")
 	has(line, "69;103;137")
-	hasnt(line, "█")
+	has(line, "█")
 	vim.api.nvim_feedkeys(vim.keycode("q"), "x", false)
 	assert(not vim.api.nvim_buf_is_valid(buf))
 	Init.opts = {}

@@ -95,8 +95,42 @@ function M.segments.context(ctx, opts)
 			return color(opts, "text.secondary", 150, 150, 150) .. "unknown" .. RST
 		end
 		used = math.max(0, math.min(100, used))
+		local filled = math.min(math.floor(used * 20 / 100), 20)
+		local fallback = { ["status.success"] = "#00DC50", ["status.warning"] = "#DCC800", ["status.error"] = "#DC2814" }
+		local function hex(role)
+			local h = get(opts, "palette", role) or fallback[role]
+			return tonumber(h:sub(2, 3), 16), tonumber(h:sub(4, 5), 16), tonumber(h:sub(6, 7), 16)
+		end
+		local function mix(a, b, t)
+			local r1, g1, b1 = hex(a)
+			local r2, g2, b2 = hex(b)
+			return rgb(
+				math.floor(r1 + (r2 - r1) * t + 0.5),
+				math.floor(g1 + (g2 - g1) * t + 0.5),
+				math.floor(b1 + (b2 - b1) * t + 0.5)
+			)
+		end
+		local out = {}
+		for i = 0, filled - 1 do
+			local c = i <= 10 and mix("status.success", "status.warning", i / 10)
+				or mix("status.warning", "status.error", (i - 10) / 9)
+			out[#out + 1] = c .. "█"
+		end
+		if filled < 20 then
+			local role = get(opts, "palette", "border.faint") and "border.faint" or "border.subtle"
+			out[#out + 1] = color(opts, role, 60, 60, 60) .. ("█"):rep(20 - filled)
+		end
 		local role = used < 20 and "status.success" or used < 90 and "status.warning" or "status.error"
-		return color(opts, role, 150, 150, 150) .. BOLD .. ("%.0f%%"):format(used) .. RST
+		local icon = used < 20 and "󰾆" or used < 70 and "󰊚" or used < 90 and "󰓅" or "󰀦"
+		return table.concat(out)
+			.. RST
+			.. " "
+			.. color(opts, role, 150, 150, 150)
+			.. BOLD
+			.. icon
+			.. " "
+			.. ("%.0f%%"):format(used)
+			.. RST
 	end
 	local used = tonumber(("%.0f"):format(num(get(ctx, "context_window", "used_percentage"))))
 	local filled = math.min(math.floor(used * 20 / 100), 20)
